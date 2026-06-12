@@ -47,12 +47,21 @@ body:hover #params, #params:focus-within { opacity: 1; pointer-events: all; }
   letter-spacing: .05em;
   color: rgba(255, 255, 255, .75);
   cursor: pointer;
+  white-space: nowrap;
 }
-#params label span { min-width: 2.4em; text-align: right; opacity: .7; font-variant-numeric: tabular-nums; }
+/* 値の幅を固定 — 桁数が変わってもスライダーが動かないように */
+#params label span {
+  width: 3.6em;
+  flex: none;
+  text-align: right;
+  opacity: .7;
+  font-variant-numeric: tabular-nums;
+}
 
 #params input[type=range] {
   -webkit-appearance: none;
   appearance: none;
+  flex: none;
   width: 96px;
   height: 2px;
   background: rgba(255, 255, 255, .25);

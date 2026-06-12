@@ -32,8 +32,7 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const SUN_HALF_ANGLE = 0.004625;  // 太陽の視半径 [rad] (0.53°/2)
 const N_TAPS  = 48;               // 太陽円盤のサンプル数
 const EXPAND  = 1.09;             // オフスクリーンパスの視野拡張（畳み込みの縁余白）
-const CAM_H   = 1.5;              // カメラ高さ [m]
-const CAM_PITCH = -35.5 * RAD;    // 俯角
+const CAM_H   = 1.5;              // カメラ高さ [m]（俯角が深いほど少し上がる）
 const FOV_Y   = 50 * RAD;
 const H_RATIO = 0.32;             // 下層樹冠の高さ / 上層樹冠の高さ
 const DPR_CAP = 2;
@@ -45,6 +44,7 @@ const P = {
   height: 12.0,   // 上層樹冠の高さ [m] → スポット径・ぼけ量
   cover:  0.66,   // 葉の密度 0..1
   elev:   62.0,   // 太陽高度 [deg] → 楕円伸長・色温度
+  pitch:  36.0,   // 見下ろす角度 [deg]（90=真上から）
 };
 
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -127,6 +127,7 @@ out vec4 oT;
 uniform float uTime;
 uniform vec2  uWindDir;
 uniform float uGust;     // 突風エンベロープ × 風スライダー（CPUで計算）
+uniform float uWPhase;   // 呼吸・隙間変化の積分位相（CPUで積分）
 uniform float uCover;    // 葉の密度 0..1
 ${NOISE_GLSL}
 ${CAMERA_GLSL}
@@ -161,12 +162,12 @@ float fbmLeaf(vec2 p, float tz, float fpc) {
 
 // 風による葉群の変位 [m]
 vec2 windField(vec2 p, float t, float swayA, float flutA, float ph) {
-  // 突風前線: 風向きに ~4m/s で流れる空間パターン
-  float front = .55 + .9 * vn3(vec3(p * .12 - uWindDir * (t * .5), ph * 3.1));
+  // 突風前線: 風向きに ~6m/s で流れる空間パターン
+  float front = .55 + .9 * vn3(vec3(p * .12 - uWindDir * (t * .7), ph * 3.1));
   float g = uGust * front;
   // 枝の揺れ: 低周波ノイズ + 進行波のうねり
-  vec2 swn = vec2(vn3(vec3(p * .085, t * .38 + ph)),
-                  vn3(vec3(p * .085 + 7.31, t * .31 + ph))) - .5;
+  vec2 swn = vec2(vn3(vec3(p * .085, t * .50 + ph)),
+                  vn3(vec3(p * .085 + 7.31, t * .42 + ph))) - .5;
   vec2 sway = uWindDir * (swn.x * 1.7 + .35 * sin(t * 2.1 + dot(p, uWindDir) * .55 + ph))
             + vec2(-uWindDir.y, uWindDir.x) * (swn.y * .8);
   // 葉のはためき: 高周波・小振幅
@@ -187,7 +188,7 @@ float holeField(vec2 q, float openness, float t, float fp) {
   vec2 g = q * HF;
   vec2 ic = floor(g), fc = fract(g);
   float distort = 1. + .3 * (vn2(q * 9.7) - .5);   // 輪郭の有機的な歪み
-  float tph = t * (.25 + .9 * uGust);              // 呼吸は風が強いほど速い
+  float tph = uWPhase;                  // 呼吸位相（風が強いほど速く進む・CPUで積分済み）
   float T = 0.;
   for (int dy = -1; dy <= 1; dy++)
   for (int dx = -1; dx <= 1; dx++) {
@@ -197,10 +198,10 @@ float holeField(vec2 q, float openness, float t, float fp) {
     float h2 = hash12(cell + 51.7);
     // 穴の中心: セル内ジッター + 葉の揺れによる小さな周回
     vec2 c = cl + .15 + .7 * h
-           + .07 * vec2(sin(tph * (.5 + .4 * h.y) + h2 * 6.28),
-                        cos(tph * (.6 + .3 * h.x) + h2 * 4.1));
-    // 呼吸: ゆっくり開いたり閉じたり（位相・速さはセルごと）
-    float breathe = .78 + .38 * sin(tph * (.6 + .8 * h2) + h.x * 6.28);
+           + .09 * vec2(sin(tph * (.7 + .5 * h.y) + h2 * 6.28),
+                        cos(tph * (.8 + .4 * h.x) + h2 * 4.1));
+    // 呼吸: 開いたり閉じたり（位相・速さはセルごと）
+    float breathe = .76 + .40 * sin(tph * (.9 + 1.3 * h2) + h.x * 6.28);
     float r = max(openness * (.26 + 1.25 * h2 * h2) * breathe - .05, 0.);
     float d = length(fc - c) * distort;
     T = max(T, smoothstep(r, r * .62, d));
@@ -211,7 +212,7 @@ float holeField(vec2 q, float openness, float t, float fp) {
 }
 
 float layerUpper(vec2 p, float t, float fp) {
-  vec2 q = p + windField(p, t, .22, .05, 0.);
+  vec2 q = p + windField(p, t, .30, .08, 0.);
   vec2 w = q + .95 * (vec2(vn2(q * .40 + 3.7), vn2(q * .40 + 9.2)) - .5);
   float clump = fbm2(w * .22, fp * .22);
   float c0 = .76 - .48 * uCover;        // 密度スライダー → 開度の中心
@@ -232,7 +233,7 @@ float canopyLayer(vec2 p, float t, float fp,
   // ドメインワープ → 有機的な葉群輪郭
   vec2 w = q + warpA * (vec2(vn2(q * warpF + 3.7 + seed), vn2(q * warpF + 9.2 + seed)) - .5);
   float clump = fbm2(w * clumpF + seed * 17.3, fp * clumpF);
-  float tz    = t * (.03 + .45 * uGust) * evolve;
+  float tz    = uWPhase * .3 * evolve;
   float leaf  = fbmLeaf(w * leafF + seed * 7.7, tz, fp * leafF);
 
   float openness = 1. - smoothstep(.38, .58, clump);        // 葉群が薄い場所
@@ -268,7 +269,7 @@ void main() {
   // 下層: 低い枝葉 — 細かく、速く小さく揺れる、まばら + 枝
   float TB = canopyLayer(p, t, fp,
     4.2,  .55, .55, .70,
-    .09,  .07, 1.5, -.38,
+    .12,  .10, 1.5, -.38,
     5., true);
 
   oT = vec4(TA, TB, 0., 1.);
@@ -475,13 +476,18 @@ function norm(a) { const l = Math.hypot(...a); return [a[0]/l, a[1]/l, a[2]/l]; 
 
 function updateCamera(t) {
   const wob = reducedMotion ? 0 : 1;
-  const pitch = CAM_PITCH + (nWobP(t * .21) - .5) * .012 * wob;
-  const yaw   =             (nWobY(t * .17) - .5) * .010 * wob;
-  const roll  =             (nWobR(t * .13) - .5) * .008 * wob;
-  cam.pos = [(nWobX(t * .19) - .5) * .012 * wob, CAM_H + (nWobP(t * .27) - .5) * .010 * wob, 0];
+  const pitch = -P.pitch * RAD + (nWobP(t * .21) - .5) * .012 * wob;
+  const yaw   =                  (nWobY(t * .17) - .5) * .010 * wob;
+  const roll  =                  (nWobR(t * .13) - .5) * .008 * wob;
+  // 真上に近づくほどカメラを上げ、視野の地面スパンを保つ
+  const camH = CAM_H + Math.max(0, P.pitch - 40) / 50 * 1.5;
+  cam.pos = [(nWobX(t * .19) - .5) * .012 * wob, camH + (nWobP(t * .27) - .5) * .010 * wob, 0];
 
-  const F = [Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch)];
-  let R = norm(cross([0, 1, 0], F));
+  // yaw→pitch の順で基底を構成（真下 pitch=-90° でも縮退しない）
+  const cp = Math.cos(pitch), sp = Math.sin(pitch);
+  const cy = Math.cos(yaw),  sy = Math.sin(yaw);
+  const F = [sy * cp, sp, cy * cp];
+  let R = [cy, 0, -sy];
   let U = cross(F, R);
   const cr = Math.cos(roll), sr = Math.sin(roll);
   const R2 = [R[0]*cr + U[0]*sr, R[1]*cr + U[1]*sr, R[2]*cr + U[2]*sr];
@@ -545,12 +551,19 @@ function bind(id, key, fmt, scale) {
     vl.textContent = fmt(el.value);
   };
   el.addEventListener('input', apply);
+  el.addEventListener('change', apply);
   apply();
+}
+// reduced-motion 環境では初期風速0（静止）。スライダーの明示操作は尊重して動かす
+if (reducedMotion) {
+  const el = document.getElementById('uWind');
+  if (el) el.value = 0;
 }
 bind('uWind',   'wind',   v => v,        0.01);
 bind('uHeight', 'height', v => v + 'm',  1);
 bind('uCover',  'cover',  v => v,        0.01);
 bind('uElev',   'elev',   v => v + '°',  1);
+bind('uPitch',  'pitch',  v => v + '°',  1);
 
 // ── フレームループ ────────────────────────────────────────────────────────────
 let tAccum = 137.0;       // 見栄えのよい初期位相
@@ -559,6 +572,7 @@ let fpsSamples = [], perfChecked = false;
 
 // デバッグ/検証用フック（動きの確認のために時間を正確に進める・ベンチマーク）
 window.__komorebi = {
+  version: 3,
   advance: s => { tAccum += s; },
   set: (k, v) => { P[k] = v; },
   time: () => tAccum,
@@ -574,7 +588,7 @@ function frame(ms) {
   requestAnimationFrame(frame);
   const dt = clamp((ms - prevMs) * 0.001, 0, 0.05);
   prevMs = ms;
-  if (!reducedMotion) tAccum += dt;   // reduced-motion 環境では静止画
+  tAccum += dt;
 
   // 自動パフォーマンス調整: 最初の数秒で重ければシミュレーション解像度を下げる
   if (!perfChecked && dt > 0) {
@@ -589,12 +603,18 @@ function frame(ms) {
   render(tAccum);
 }
 
+let windPhase = 0, lastRenderT = null;
+
 function render(t) {
   updateCamera(t);
 
   // 突風エンベロープ（多重時間スケール）
   const env = 0.6 * nGust1(t * 0.10) + 0.4 * nGust2(t * 0.31);
-  const gust = (reducedMotion ? 0 : P.wind) * (0.30 + 0.95 * env);
+  const gust = P.wind * (0.25 + 1.10 * env);
+  // 呼吸・隙間変化の位相は積分で進める（t×係数だと風が変わった瞬間に位相が飛ぶ）
+  if (lastRenderT === null) lastRenderT = t;
+  windPhase += Math.max(0, t - lastRenderT) * (0.05 + 2.0 * gust);
+  lastRenderT = t;
 
   // pass1: canopy
   gl.bindFramebuffer(gl.FRAMEBUFFER, rtCanopy.fbo);
@@ -604,6 +624,7 @@ function render(t) {
   gl.uniform1f(passCanopy.u.uTime, t);
   gl.uniform2f(passCanopy.u.uWindDir, WIND_DIR[0], WIND_DIR[2]);
   gl.uniform1f(passCanopy.u.uGust, gust);
+  gl.uniform1f(passCanopy.u.uWPhase, windPhase);
   gl.uniform1f(passCanopy.u.uCover, P.cover);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
 
