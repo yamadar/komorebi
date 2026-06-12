@@ -40,11 +40,11 @@ const MAX_SIM_W = 1600;           // シミュレーションFBOの最大幅
 
 // ── ユーザーパラメータ ────────────────────────────────────────────────────────
 const P = {
-  wind:   0.45,   // 風の強さ 0..1
-  height: 12.0,   // 上層樹冠の高さ [m] → スポット径・ぼけ量
-  cover:  0.66,   // 葉の密度 0..1
-  elev:   62.0,   // 太陽高度 [deg] → 楕円伸長・色温度
-  pitch:  36.0,   // 見下ろす角度 [deg]（90=真上から）
+  wind:   0.50,   // 風の強さ 0..1
+  height: 16.0,   // 上層樹冠の高さ [m] → スポット径・ぼけ量
+  cover:  0.45,   // 葉の密度 0..1
+  elev:   60.0,   // 太陽高度 [deg] → 楕円伸長・色温度
+  pitch:  35.0,   // 見下ろす角度 [deg]（90=真上から）
 };
 
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -126,9 +126,12 @@ in vec2 vUV;
 out vec4 oT;
 uniform float uTime;
 uniform vec2  uWindDir;
+uniform vec2  uWindTravel; // 突風前線の移動の積分（風向きが変わっても連続）
 uniform float uGust;     // 突風エンベロープ × 風スライダー（CPUで計算）
 uniform float uWPhase;   // 呼吸・隙間変化の積分位相（CPUで積分）
 uniform float uCover;    // 葉の密度 0..1
+uniform vec4  uPulse[4]; // タップの波紋 xy=地面位置 z=経過秒 w=強さ
+uniform vec3  uHold;     // 長押し xy=地面位置 z=強さ
 ${NOISE_GLSL}
 ${CAMERA_GLSL}
 
@@ -163,8 +166,17 @@ float fbmLeaf(vec2 p, float tz, float fpc) {
 // 風による葉群の変位 [m]
 vec2 windField(vec2 p, float t, float swayA, float flutA, float ph) {
   // 突風前線: 風向きに ~6m/s で流れる空間パターン
-  float front = .55 + .9 * vn3(vec3(p * .12 - uWindDir * (t * .7), ph * 3.1));
+  float front = .55 + .9 * vn3(vec3(p * .12 - uWindTravel, ph * 3.1));
   float g = uGust * front;
+  // タップの波紋: 広がる輪の突風で葉がざわめく
+  for (int i = 0; i < 4; i++) {
+    float d = length(p - uPulse[i].xy);
+    float rr = (d - 1.8 * uPulse[i].z) / .45;
+    g += uPulse[i].w * exp(-rr * rr);
+  }
+  // 長押し: 指の下で枝葉が絶えずざわめく
+  vec2 hv = p - uHold.xy;
+  g += uHold.z * 1.2 * exp(-dot(hv, hv) / .9);
   // 枝の揺れ: 低周波ノイズ + 進行波のうねり
   vec2 swn = vec2(vn3(vec3(p * .085, t * .50 + ph)),
                   vn3(vec3(p * .085 + 7.31, t * .42 + ph))) - .5;
@@ -211,13 +223,14 @@ float holeField(vec2 q, float openness, float t, float fp) {
   return mix(openness * .38, T, hfade);
 }
 
-float layerUpper(vec2 p, float t, float fp) {
+float layerUpper(vec2 p, float t, float fp, float hk) {
   vec2 q = p + windField(p, t, .30, .08, 0.);
   vec2 w = q + .95 * (vec2(vn2(q * .40 + 3.7), vn2(q * .40 + 9.2)) - .5);
   float clump = fbm2(w * .22, fp * .22);
   float c0 = .76 - .48 * uCover;        // 密度スライダー → 開度の中心
   float openness = 1. - smoothstep(c0 - .22, c0 + .22, clump);
   openness = .07 + .93 * pow(openness, .8);
+  openness = min(openness + hk * .75, 1.);  // 長押し: 葉がかき分けられて光が差す
   float T = holeField(w, openness, t, fp);
   T = max(T, 1. - smoothstep(.13, .26, clump));   // 完全な空き地
   return T;
@@ -264,13 +277,18 @@ void main() {
   float fp = max(length(dFdx(p)), length(dFdy(p)));  // 1texelの地面サイズ [m]
   float t = uTime;
 
+  // 長押しの「葉のかき分け」強度
+  vec2 hv = p - uHold.xy;
+  float hk = uHold.z * exp(-dot(hv, hv) / .55);
+
   // 上層: 高い樹冠 — 葉群の小さな隙間がピンホールとなり丸いスポットを作る
-  float TA = layerUpper(p, t, fp);
+  float TA = layerUpper(p, t, fp, hk);
   // 下層: 低い枝葉 — 細かく、速く小さく揺れる、まばら + 枝
   float TB = canopyLayer(p, t, fp,
     4.2,  .55, .55, .70,
     .12,  .10, 1.5, -.38,
     5., true);
+  TB = mix(TB, 1., hk * .8);
 
   oT = vec4(TA, TB, 0., 1.);
 }`;
@@ -507,7 +525,12 @@ function setCameraUniforms(u, expand) {
 
 // ── 太陽 ─────────────────────────────────────────────────────────────────────
 const SUN_AZIM = 145 * RAD;   // 方位（楕円の長軸方向を決める）
-const WIND_DIR = norm([0.8, 0, 0.6]);
+
+// ── 風の状態（スワイプで風向きが変わる）─────────────────────────────────────
+let windDir = norm([0.8, 0, 0.6]);
+let windDirTarget = windDir.slice();
+const windTravel = [0, 0];    // 突風前線の移動の積分（ノイズ座標系）
+let swipeBoost = 0;           // スワイプによる一時的な突風
 
 // 太陽円盤(単位円) → 上層樹冠の地面オフセット行列 [m]。数値ヤコビアンで厳密に。
 function sunMatrix(elevDeg, hA) {
@@ -565,6 +588,81 @@ bind('uCover',  'cover',  v => v,        0.01);
 bind('uElev',   'elev',   v => v + '°',  1);
 bind('uPitch',  'pitch',  v => v + '°',  1);
 
+// ── パラメータパネルの開閉 ────────────────────────────────────────────────────
+const paramsEl = document.getElementById('params');
+const toggleEl = document.getElementById('paramsToggle');
+function setPanel(open) {
+  paramsEl.hidden = !open;
+  toggleEl.setAttribute('aria-expanded', String(open));
+}
+toggleEl.addEventListener('click', () => setPanel(paramsEl.hidden));
+window.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && !paramsEl.hidden) setPanel(false);
+});
+
+// ── ジェスチャ ────────────────────────────────────────────────────────────────
+//  タップ   = 波紋状の突風が広がり、スポットがざわめく
+//  スワイプ = なでた方向に風向きが変わり、突風が吹く
+//  長押し   = 葉がかき分けられて指の下に光のプールが開く（ドラッグで移動）
+const pulses = [];                                 // {x, z, t0}
+const hold = { x: 0, z: 0, k: 0, active: false, since: 0 };
+let ptr = null;
+
+// 画面座標 → 地面 (y=0) の座標 [m]
+function screenToGround(cx, cy) {
+  const rc = canvas.getBoundingClientRect();
+  if (!(rc.width > 0 && rc.height > 0)) return [0, 4];   // レイアウト前のNaN防止
+  const nx = ((cx - rc.left) / rc.width) * 2 - 1;
+  const ny = -(((cy - rc.top) / rc.height) * 2 - 1);
+  const tx = cam.tanHalf[0], ty = cam.tanHalf[1];
+  const d = [
+    cam.F[0] + nx * tx * cam.R[0] + ny * ty * cam.U[0],
+    cam.F[1] + nx * tx * cam.R[1] + ny * ty * cam.U[1],
+    cam.F[2] + nx * tx * cam.R[2] + ny * ty * cam.U[2],
+  ];
+  const s = cam.pos[1] / -Math.min(d[1], -0.02);
+  return [cam.pos[0] + d[0] * s, cam.pos[2] + d[2] * s];
+}
+
+canvas.addEventListener('pointerdown', e => {
+  if (!e.isPrimary) return;
+  ptr = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY,
+          t0: performance.now(), long: false };
+});
+window.addEventListener('pointermove', e => {
+  if (!ptr || e.pointerId !== ptr.id) return;
+  ptr.x = e.clientX; ptr.y = e.clientY;
+  if (ptr.long) {
+    const g = screenToGround(e.clientX, e.clientY);
+    hold.x = g[0]; hold.z = g[1];
+  }
+});
+window.addEventListener('pointerup', e => {
+  if (!ptr || e.pointerId !== ptr.id) return;
+  const dur = performance.now() - ptr.t0;
+  const distPx = Math.hypot(e.clientX - ptr.x0, e.clientY - ptr.y0);
+  if (ptr.long) {
+    hold.active = false;                            // 長押し終了 → renderで減衰
+  } else if (distPx > 60 && dur < 600) {            // スワイプ → 風向き + 突風
+    const g0 = screenToGround(ptr.x0, ptr.y0);
+    const g1 = screenToGround(e.clientX, e.clientY);
+    const vx = g1[0] - g0[0], vz = g1[1] - g0[1];
+    if (Math.hypot(vx, vz) > 0.05) {
+      windDirTarget = norm([vx, 0, vz]);
+      swipeBoost = Math.min(swipeBoost + 0.4 + Math.hypot(vx, vz) * 0.15, 1.0);
+    }
+  } else if (distPx < 24 && dur < 350) {            // タップ → 波紋
+    const g = screenToGround(e.clientX, e.clientY);
+    pulses.push({ x: g[0], z: g[1], t0: tAccum });
+    if (pulses.length > 4) pulses.shift();
+  }
+  ptr = null;
+});
+window.addEventListener('pointercancel', () => {
+  if (ptr && ptr.long) hold.active = false;
+  ptr = null;
+});
+
 // ── フレームループ ────────────────────────────────────────────────────────────
 let tAccum = 137.0;       // 見栄えのよい初期位相
 let prevMs = 0;
@@ -572,7 +670,9 @@ let fpsSamples = [], perfChecked = false;
 
 // デバッグ/検証用フック（動きの確認のために時間を正確に進める・ベンチマーク）
 window.__komorebi = {
-  version: 3,
+  version: 5,
+  state: () => ({ windDir: windDir.slice(), swipeBoost, windPhase,
+                  pulses: pulses.length, holdK: hold.k }),
   advance: s => { tAccum += s; },
   set: (k, v) => { P[k] = v; },
   time: () => tAccum,
@@ -604,17 +704,53 @@ function frame(ms) {
 }
 
 let windPhase = 0, lastRenderT = null;
+const pulseArr = new Float32Array(16);
 
 function render(t) {
   updateCamera(t);
-
-  // 突風エンベロープ（多重時間スケール）
-  const env = 0.6 * nGust1(t * 0.10) + 0.4 * nGust2(t * 0.31);
-  const gust = P.wind * (0.25 + 1.10 * env);
-  // 呼吸・隙間変化の位相は積分で進める（t×係数だと風が変わった瞬間に位相が飛ぶ）
-  if (lastRenderT === null) lastRenderT = t;
-  windPhase += Math.max(0, t - lastRenderT) * (0.05 + 2.0 * gust);
+  const dtr = lastRenderT === null ? 0 : Math.max(0, t - lastRenderT);
   lastRenderT = t;
+
+  // 長押しの成立判定（指がほぼ動かず350ms超）と強度の立ち上げ/減衰
+  if (ptr && !ptr.long && performance.now() - ptr.t0 > 350 &&
+      Math.hypot(ptr.x - ptr.x0, ptr.y - ptr.y0) < 24) {
+    ptr.long = true;
+    const g = screenToGround(ptr.x, ptr.y);
+    hold.x = g[0]; hold.z = g[1];
+    hold.active = true; hold.since = t;
+  }
+  if (hold.active) hold.k = Math.min(1, (t - hold.since) / 0.7);
+  else hold.k = Math.max(0, hold.k - dtr * 2.5);
+
+  // 風向きをスワイプ方向へなめらかに向ける
+  const kd = 1 - Math.exp(-dtr * 4);
+  windDir = norm([
+    windDir[0] + (windDirTarget[0] - windDir[0]) * kd, 0,
+    windDir[2] + (windDirTarget[2] - windDir[2]) * kd,
+  ]);
+  swipeBoost *= Math.exp(-dtr / 2.2);
+
+  // 突風エンベロープ（多重時間スケール）+ スワイプの突風
+  const env = 0.6 * nGust1(t * 0.10) + 0.4 * nGust2(t * 0.31);
+  const gust = Math.min(P.wind * (0.25 + 1.10 * env) + swipeBoost, 1.5);
+  // 呼吸・隙間変化の位相、突風前線の移動は積分で進める
+  // （t×係数だと風が変わった瞬間に位相が飛ぶ）
+  windPhase += dtr * (0.05 + 2.0 * gust);
+  windTravel[0] += dtr * 0.7 * windDir[0];
+  windTravel[1] += dtr * 0.7 * windDir[2];
+
+  // タップ波紋の更新（3秒で消滅）
+  pulseArr.fill(0);
+  for (let i = pulses.length - 1; i >= 0; i--) {
+    if (t - pulses[i].t0 > 3) pulses.splice(i, 1);
+  }
+  pulses.forEach((q, i) => {
+    const age = Math.max(0, t - q.t0);
+    pulseArr[i * 4]     = q.x;
+    pulseArr[i * 4 + 1] = q.z;
+    pulseArr[i * 4 + 2] = age;
+    pulseArr[i * 4 + 3] = 0.6 * Math.exp(-age * 1.1);
+  });
 
   // pass1: canopy
   gl.bindFramebuffer(gl.FRAMEBUFFER, rtCanopy.fbo);
@@ -622,10 +758,13 @@ function render(t) {
   gl.useProgram(passCanopy.prog);
   setCameraUniforms(passCanopy.u, EXPAND);
   gl.uniform1f(passCanopy.u.uTime, t);
-  gl.uniform2f(passCanopy.u.uWindDir, WIND_DIR[0], WIND_DIR[2]);
+  gl.uniform2f(passCanopy.u.uWindDir, windDir[0], windDir[2]);
+  gl.uniform2f(passCanopy.u.uWindTravel, windTravel[0], windTravel[1]);
   gl.uniform1f(passCanopy.u.uGust, gust);
   gl.uniform1f(passCanopy.u.uWPhase, windPhase);
   gl.uniform1f(passCanopy.u.uCover, P.cover);
+  gl.uniform4fv(passCanopy.u.uPulse, pulseArr);
+  gl.uniform3f(passCanopy.u.uHold, hold.x, hold.z, hold.k);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
 
   // pass2: irradiance

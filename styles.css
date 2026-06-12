@@ -1,6 +1,13 @@
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 html, body { width: 100%; height: 100%; overflow: hidden; background: #2b2c2d; }
-canvas { display: block; width: 100%; height: 100%; }
+canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;          /* スワイプ・長押しジェスチャ用 */
+  user-select: none;
+  -webkit-user-select: none;
+}
 
 #label {
   position: fixed;
@@ -18,9 +25,30 @@ canvas { display: block; width: 100%; height: 100%; }
   white-space: nowrap;
 }
 
-#params {
+#paramsToggle {
   position: fixed;
   top: 1.2rem;
+  right: 1.2rem;
+  padding: .45rem .75rem;
+  border: 0;
+  border-radius: .55rem;
+  background: rgba(20, 22, 24, .5);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  font-family: 'Hiragino Sans', 'Noto Sans JP', system-ui, sans-serif;
+  font-size: .66rem;
+  letter-spacing: .08em;
+  color: rgba(255, 255, 255, .8);
+  cursor: pointer;
+  opacity: .55;
+  transition: opacity .25s;
+}
+#paramsToggle:hover, #paramsToggle:focus-visible, #paramsToggle[aria-expanded="true"] { opacity: 1; }
+#paramsToggle:focus-visible { outline: 2px solid #9cf; outline-offset: 2px; }
+
+#params {
+  position: fixed;
+  top: 3.6rem;
   right: 1.2rem;
   display: flex;
   flex-direction: column;
@@ -30,12 +58,8 @@ canvas { display: block; width: 100%; height: 100%; }
   background: rgba(20, 22, 24, .55);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  opacity: 0;
-  transition: opacity .35s;
-  pointer-events: none;
 }
-body:hover #params, #params:focus-within { opacity: 1; pointer-events: all; }
-@media (pointer: coarse) { #params { opacity: .9; pointer-events: all; } }
+#params[hidden] { display: none; }
 
 #params label {
   display: flex;
@@ -82,20 +106,16 @@ body:hover #params, #params:focus-within { opacity: 1; pointer-events: all; }
 
 #alt {
   position: fixed;
-  bottom: 1.9rem;
-  right: 1.4rem;
+  bottom: .9rem;
+  right: .9rem;
   font-family: 'Hiragino Sans', 'Noto Sans JP', system-ui, sans-serif;
-  font-size: .62rem;
+  font-size: .56rem;
   letter-spacing: .06em;
-  color: rgba(255, 255, 255, .38);
+  color: rgba(255, 255, 255, .30);
   text-shadow: 0 1px 4px rgba(0, 0, 0, .45);
   text-decoration: none;
-  opacity: 0;
-  transition: opacity .35s;
 }
-body:hover #alt, #alt:focus-visible { opacity: 1; }
-#alt:hover { color: rgba(255, 255, 255, .75); }
-@media (pointer: coarse) { #alt { opacity: .9; } }
+#alt:hover, #alt:focus-visible { color: rgba(255, 255, 255, .72); }
 
 #nogl {
   position: fixed;
