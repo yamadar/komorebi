@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>木漏れ日</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="label">木漏れ日</div>
+
+<div id="params">
+  <label>仰角 <input type="range" id="sElev" min="15" max="75" value="38" autocomplete="off"> <span id="sElevV">38°</span></label>
+  <label>密度 <input type="range" id="sDens" min="20" max="100" value="55" autocomplete="off"> <span id="sDensV">55</span></label>
+  <label>風速 <input type="range" id="sWind" min="0"  max="100" value="40" autocomplete="off"> <span id="sWindV">40</span></label>
+  <div class="sep"></div>
+  <label class="chk"><input type="checkbox" id="L0" checked autocomplete="off"> 0 林床＋周縁減光</label>
+  <label class="chk"><input type="checkbox" id="L1a" checked autocomplete="off"> 1a 光のプール（大）</label>
+  <label class="chk"><input type="checkbox" id="L1b" checked autocomplete="off"> 1b 光のプール（中）</label>
+  <label class="chk"><input type="checkbox" id="L1c" checked autocomplete="off"> 1c 光のプール（小）</label>
+  <label class="chk"><input type="checkbox" id="L2" checked autocomplete="off"> 2 太陽像（楕円）</label>
+  <label class="chk"><input type="checkbox" id="L3" checked autocomplete="off"> 3 樹冠の影</label>
+  <label class="chk"><input type="checkbox" id="L4" checked autocomplete="off"> 4 葉影（小枝）</label>
+  <label class="chk"><input type="checkbox" id="L5" checked autocomplete="off"> 5 ブルーム</label>
+  <label class="chk"><input type="checkbox" id="L6" checked autocomplete="off"> 6 大気（緑被り）</label>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>

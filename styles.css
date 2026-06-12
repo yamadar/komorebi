@@ -80,6 +80,23 @@ body:hover #params, #params:focus-within { opacity: 1; pointer-events: all; }
   outline-offset: 2px;
 }
 
+#alt {
+  position: fixed;
+  bottom: 1.9rem;
+  right: 1.4rem;
+  font-family: 'Hiragino Sans', 'Noto Sans JP', system-ui, sans-serif;
+  font-size: .62rem;
+  letter-spacing: .06em;
+  color: rgba(255, 255, 255, .38);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, .45);
+  text-decoration: none;
+  opacity: 0;
+  transition: opacity .35s;
+}
+body:hover #alt, #alt:focus-visible { opacity: 1; }
+#alt:hover { color: rgba(255, 255, 255, .75); }
+@media (pointer: coarse) { #alt { opacity: .9; } }
+
 #nogl {
   position: fixed;
   inset: 0;
