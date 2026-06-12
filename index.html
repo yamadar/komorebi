@@ -10,21 +10,14 @@
 <canvas id="c"></canvas>
 <div id="label">木漏れ日</div>
 
-<div id="params">
-  <label>仰角 <input type="range" id="sElev" min="15" max="75" value="38" autocomplete="off"> <span id="sElevV">38°</span></label>
-  <label>密度 <input type="range" id="sDens" min="20" max="100" value="55" autocomplete="off"> <span id="sDensV">55</span></label>
-  <label>風速 <input type="range" id="sWind" min="0"  max="100" value="40" autocomplete="off"> <span id="sWindV">40</span></label>
-  <div class="sep"></div>
-  <label class="chk"><input type="checkbox" id="L0" checked autocomplete="off"> 0 林床＋周縁減光</label>
-  <label class="chk"><input type="checkbox" id="L1a" checked autocomplete="off"> 1a 光のプール（大）</label>
-  <label class="chk"><input type="checkbox" id="L1b" checked autocomplete="off"> 1b 光のプール（中）</label>
-  <label class="chk"><input type="checkbox" id="L1c" checked autocomplete="off"> 1c 光のプール（小）</label>
-  <label class="chk"><input type="checkbox" id="L2" checked autocomplete="off"> 2 太陽像（楕円）</label>
-  <label class="chk"><input type="checkbox" id="L3" checked autocomplete="off"> 3 樹冠の影</label>
-  <label class="chk"><input type="checkbox" id="L4" checked autocomplete="off"> 4 葉影（小枝）</label>
-  <label class="chk"><input type="checkbox" id="L5" checked autocomplete="off"> 5 ブルーム</label>
-  <label class="chk"><input type="checkbox" id="L6" checked autocomplete="off"> 6 大気（緑被り）</label>
+<div id="params" aria-label="表示パラメータ">
+  <label>風の強さ <input type="range" id="uWind" min="0" max="100" value="45" autocomplete="off"> <span id="uWindV">45</span></label>
+  <label>樹冠の高さ <input type="range" id="uHeight" min="5" max="16" value="12" step="0.5" autocomplete="off"> <span id="uHeightV">12m</span></label>
+  <label>葉の密度 <input type="range" id="uCover" min="40" max="90" value="66" autocomplete="off"> <span id="uCoverV">66</span></label>
+  <label>太陽高度 <input type="range" id="uElev" min="35" max="80" value="62" autocomplete="off"> <span id="uElevV">62°</span></label>
 </div>
+
+<div id="nogl" hidden>このページの表示には WebGL2 対応ブラウザが必要です。</div>
 
 <script src="script.js"></script>
 </body>

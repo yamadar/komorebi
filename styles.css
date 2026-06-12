@@ -1,6 +1,7 @@
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0600; }
-canvas { display: block; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: #2b2c2d; }
+canvas { display: block; width: 100%; height: 100%; }
+
 #label {
   position: fixed;
   bottom: 1.9rem;
@@ -10,69 +11,74 @@ canvas { display: block; }
   font-size: .70rem;
   letter-spacing: .72em;
   text-indent: .72em;
-  color: rgba(255, 230, 150, .22);
+  color: rgba(255, 255, 255, .34);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, .45);
   pointer-events: none;
   user-select: none;
   white-space: nowrap;
 }
+
 #params {
   position: fixed;
-  top: 1.4rem;
-  right: 1.4rem;
+  top: 1.2rem;
+  right: 1.2rem;
   display: flex;
   flex-direction: column;
   gap: .55rem;
+  padding: .8rem .9rem;
+  border-radius: .6rem;
+  background: rgba(20, 22, 24, .55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   opacity: 0;
   transition: opacity .35s;
   pointer-events: none;
 }
-body:hover #params { opacity: 1; pointer-events: all; }
+body:hover #params, #params:focus-within { opacity: 1; pointer-events: all; }
+@media (pointer: coarse) { #params { opacity: .9; pointer-events: all; } }
+
 #params label {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: .6rem;
-  font-family: 'SF Mono', 'JetBrains Mono', 'Courier New', monospace;
-  font-size: .62rem;
-  letter-spacing: .08em;
-  color: rgba(255, 222, 120, .40);
+  font-family: 'Hiragino Sans', 'Noto Sans JP', system-ui, sans-serif;
+  font-size: .66rem;
+  letter-spacing: .05em;
+  color: rgba(255, 255, 255, .75);
   cursor: pointer;
 }
+#params label span { min-width: 2.4em; text-align: right; opacity: .7; font-variant-numeric: tabular-nums; }
+
 #params input[type=range] {
   -webkit-appearance: none;
-  width: 80px;
+  appearance: none;
+  width: 96px;
   height: 2px;
-  background: rgba(255,215,100,.18);
+  background: rgba(255, 255, 255, .25);
   border-radius: 1px;
   outline: none;
   cursor: pointer;
 }
 #params input[type=range]::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 8px; height: 8px;
+  width: 10px; height: 10px;
   border-radius: 50%;
-  background: rgba(255,218,100,.55);
+  background: rgba(255, 255, 255, .85);
 }
-#params .sep {
-  height: 1px;
-  background: rgba(255,215,100,.14);
-  margin: .25rem 0 .1rem;
+#params input[type=range]:focus-visible::-webkit-slider-thumb {
+  outline: 2px solid #9cf;
+  outline-offset: 2px;
 }
-#params label.chk {
-  gap: .45rem;
-  color: rgba(255,222,120,.55);
-  letter-spacing: .06em;
+
+#nogl {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-family: 'Hiragino Sans', 'Noto Sans JP', system-ui, sans-serif;
+  font-size: .9rem;
+  color: rgba(255, 255, 255, .8);
+  background: #2b2c2d;
 }
-#params input[type=checkbox] {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 11px; height: 11px;
-  border: 1px solid rgba(255,206,90,.45);
-  border-radius: 2px;
-  background: transparent;
-  cursor: pointer;
-  position: relative;
-}
-#params input[type=checkbox]:checked {
-  background: rgba(255,206,90,.75);
-  border-color: rgba(255,206,90,.85);
-}
+#nogl[hidden] { display: none; }
