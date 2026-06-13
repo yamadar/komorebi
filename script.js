@@ -631,10 +631,31 @@ canvas.addEventListener('pointerdown', e => {
 });
 window.addEventListener('pointermove', e => {
   if (!ptr || e.pointerId !== ptr.id) return;
+  const prevX = ptr.x, prevY = ptr.y;
   ptr.x = e.clientX; ptr.y = e.clientY;
   if (ptr.long) {
     const g = screenToGround(e.clientX, e.clientY);
     hold.x = g[0]; hold.z = g[1];
+    return;
+  }
+  // 一定以上動いたらスワイプ（ドラッグ）モード — 離す前から連続的に反応する
+  if (!ptr.swiping && Math.hypot(ptr.x - ptr.x0, ptr.y - ptr.y0) > 24) ptr.swiping = true;
+  if (ptr.swiping) {
+    const g0 = screenToGround(prevX, prevY);
+    const g1 = screenToGround(ptr.x, ptr.y);
+    const dx = g1[0] - g0[0], dz = g1[1] - g0[1];
+    const d = Math.hypot(dx, dz);
+    if (d > 0.004) {
+      windDirTarget = norm([dx, 0, dz]);            // なでている方向へ追従
+      swipeBoost = Math.min(swipeBoost + d * 0.5, 1.1);
+      // 指の軌跡に小さな波紋の航跡を残す
+      ptr.wake = (ptr.wake || 0) + d;
+      if (ptr.wake > 0.45) {
+        ptr.wake = 0;
+        pulses.push({ x: g1[0], z: g1[1], t0: tAccum, amp: 0.35 });
+        if (pulses.length > 4) pulses.shift();
+      }
+    }
   }
 });
 window.addEventListener('pointerup', e => {
@@ -643,17 +664,9 @@ window.addEventListener('pointerup', e => {
   const distPx = Math.hypot(e.clientX - ptr.x0, e.clientY - ptr.y0);
   if (ptr.long) {
     hold.active = false;                            // 長押し終了 → renderで減衰
-  } else if (distPx > 60 && dur < 600) {            // スワイプ → 風向き + 突風
-    const g0 = screenToGround(ptr.x0, ptr.y0);
-    const g1 = screenToGround(e.clientX, e.clientY);
-    const vx = g1[0] - g0[0], vz = g1[1] - g0[1];
-    if (Math.hypot(vx, vz) > 0.05) {
-      windDirTarget = norm([vx, 0, vz]);
-      swipeBoost = Math.min(swipeBoost + 0.4 + Math.hypot(vx, vz) * 0.15, 1.0);
-    }
-  } else if (distPx < 24 && dur < 350) {            // タップ → 波紋
+  } else if (!ptr.swiping && distPx < 24 && dur < 350) {   // タップ → 波紋
     const g = screenToGround(e.clientX, e.clientY);
-    pulses.push({ x: g[0], z: g[1], t0: tAccum });
+    pulses.push({ x: g[0], z: g[1], t0: tAccum, amp: 0.6 });
     if (pulses.length > 4) pulses.shift();
   }
   ptr = null;
@@ -670,7 +683,7 @@ let fpsSamples = [], perfChecked = false;
 
 // デバッグ/検証用フック（動きの確認のために時間を正確に進める・ベンチマーク）
 window.__komorebi = {
-  version: 5,
+  version: 6,
   state: () => ({ windDir: windDir.slice(), swipeBoost, windPhase,
                   pulses: pulses.length, holdK: hold.k }),
   advance: s => { tAccum += s; },
@@ -749,7 +762,7 @@ function render(t) {
     pulseArr[i * 4]     = q.x;
     pulseArr[i * 4 + 1] = q.z;
     pulseArr[i * 4 + 2] = age;
-    pulseArr[i * 4 + 3] = 0.6 * Math.exp(-age * 1.1);
+    pulseArr[i * 4 + 3] = q.amp * Math.exp(-age * 1.1);
   });
 
   // pass1: canopy
