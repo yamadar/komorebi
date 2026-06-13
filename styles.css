@@ -11,15 +11,19 @@ canvas {
 
 #label {
   position: fixed;
-  bottom: 1.9rem;
+  bottom: 2rem;
   left: 50%;
   transform: translateX(-50%);
   font-family: 'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', Georgia, serif;
-  font-size: .70rem;
+  font-size: 1.15rem;
   letter-spacing: .72em;
   text-indent: .72em;
-  color: rgba(255, 255, 255, .34);
-  text-shadow: 0 1px 6px rgba(0, 0, 0, .45);
+  color: rgba(255, 255, 255, .92);
+  /* 明るい光のプールの上でも読めるよう、暗いグローを重ねて敷く */
+  text-shadow: 0 2px 26px rgba(0, 0, 0, .85),
+               0 1px 10px rgba(0, 0, 0, .65),
+               0 1px 4px rgba(0, 0, 0, .55),
+               0 0 2px rgba(0, 0, 0, .5);
   pointer-events: none;
   user-select: none;
   white-space: nowrap;
